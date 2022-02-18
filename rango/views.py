@@ -18,6 +18,7 @@ from django.http import HttpResponse
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 
+from datetime import datetime
 
 def index(request):
 
@@ -35,10 +36,26 @@ def index(request):
     context_dict['categories'] = category_list
     context_dict['pages'] = pages_list
 
+# Call the helper function to handle the cookies
+    visitor_cookie_handler(request)
+
+
+    #context_dict['visits'] = request.session['visits']
+
+    #request.session.set_test_cookie()
+    #获取response object
+    response = render(request, 'rango/index.html', context=context_dict)
+    
+
+    return response
+
+
     # Return a rendered response to send to the client.
     # We make use of the shortcut function to make our lives easier.
     # Note that the first parameter is the template we wish to use.
-    return render(request,'rango/index.html',context=context_dict)
+
+    #####return render(request,'rango/index.html',context=context_dict)
+    
     #render函数接收用户的request, 模板html文件和 context键值对字典
     #return HttpResponse("Rango says hey there partner!<a href='/rango/about/'>About</a>")
     
@@ -48,7 +65,17 @@ def about(request):
     #return HttpResponse("Rango says here is the about page.<a href='/rango/'>Index</a>")
 
     context_dict = {}
-    return render(request,'rango/about.html',context=context_dict)
+
+
+    visitor_cookie_handler(request)
+    context_dict['visits'] = request.session['visits']
+    #cookie session
+    # if request.session.test_cookie_worked():
+    #     print("TEST COOKIE WORKED!")
+    #     request.session.delete_test_cookie()
+
+    response = render(request, 'rango/about.html', context=context_dict)
+    return response
 
 #用来添加新page给每个category
 def show_category(request, category_name_slug):
@@ -214,3 +241,33 @@ def user_logout(request):
     logout(request)
     # Take the user back to the homepage.
     return redirect(reverse('rango:index'))
+
+# a helper method 取得cookie
+def get_server_side_cookie(request, cookie, default_val=None):
+    val = request.session.get(cookie)
+    if not val:
+        val = default_val
+    return val
+
+#并不是一个view 只是helper函数 不反回response object
+# handle cookie
+def visitor_cookie_handler(request):
+    #获取visit次数, 用COOKIES.GET 获得
+
+    visits = int(get_server_side_cookie(request, 'visits','1'))
+
+    last_visit_cookie = get_server_side_cookie(request, 'last_visit', str(datetime.now()))
+
+    last_visit_time = datetime.strptime(last_visit_cookie[:-7],
+                                        '%Y-%m-%d %H:%M:%S')
+    # 如果距离上次访问超过一天
+    if (datetime.now() - last_visit_time).days > 0:
+        visits = visits + 1
+        # Update the last visit cookie now that we have updated the count
+        request.session['last_visit'] = str(datetime.now())
+    else:
+        # Set the last visit cookie
+        request.session['last_visit'] = last_visit_cookie
+
+    # Update/set the visits cookie
+    request.session['visits'] = visits
