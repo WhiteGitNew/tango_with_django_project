@@ -1,17 +1,22 @@
 from audioop import reverse
 from cgitb import html
+import profile
 from re import A
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from django.http import HttpResponse
+
 from django.template import context
-from rango.forms import CategoryForm
 from rango.models import Category
 from rango.models import Page
 from rango.forms import CategoryForm
 from rango.forms import PageForm
-from django.shortcuts import redirect
+from rango.forms import UserForm, UserProfileForm
+
+from django.contrib.auth import authenticate, login, logout
+from django.http import HttpResponse
+from django.urls import reverse
+from django.contrib.auth.decorators import login_required
 
 
 def index(request):
@@ -78,7 +83,7 @@ def show_category(request, category_name_slug):
     # Go render the response and return it to the client.
     return render(request, 'rango/category.html', context=context_dict)
 
-
+@login_required
 def add_category(request):
     form = CategoryForm()
 
@@ -96,6 +101,7 @@ def add_category(request):
             print(form.errors)
     return render(request,'rango/add_category.html', {'form':form})
 
+@login_required
 def add_page(request, category_name_slug):
     try:
         category = Category.objects.get(slug=category_name_slug)
@@ -125,3 +131,86 @@ def add_page(request, category_name_slug):
             print(form.errors)
     context_dict = {'form': form, 'category':category}
     return render(request, 'rango/add_page.html', context=context_dict)
+
+def register(request):
+    # bool值 注册是否成功
+    registered = False
+
+    if request.method == 'POST':
+        #尝试从生表格中收集数据
+        user_form = UserForm(request.POST)
+        profile_form = UserProfileForm(request.POST)
+
+        if user_form.is_valid() and profile_form.is_valid():
+            #如果valid 储存数据
+            user = user_form.save()
+
+            #hash password, update user object
+            user.set_password(user.password)
+            user.save()
+
+            #sort out the userprofile instance
+            #commit=false 来推迟model储存
+            profile = profile_form.save(commit=False)
+            profile.user = user
+
+            #上传图片
+            if 'picture' in request.FILES:
+                profile.picture = request.FILES['picture']
+
+            profile.save
+
+            registered = True
+        else:
+            #不可用表格
+            print(user_form.errors, profile_form.errors)
+    else:
+        #如果不是HTTP POST请求,空白表格
+        user_form = UserForm()
+        profile_form = UserProfileForm()
+
+    return render(request,'rango/register.html',
+                           context={'user_form': user_form,
+                                    'profile_form': profile_form,
+                                    'registered': registered})
+def user_login(request):
+    if request.method == 'POST':
+        #收集从用户提供的用户名密码,通过login表单
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+
+        #用django自带的机制检查用户密码对,返回obj
+        user = authenticate(username=username,password=password)
+
+        # 如果得到了user obj 那么正确
+        # 如果没得到obj, None 找不到user
+        if user:
+            if user.is_active:
+                login(request,user)
+                return redirect(reverse('rango:index'))
+            else:
+                #非活跃用户
+                return HttpResponse("Your Rango account is disabled.")
+        else:
+            # 提供信息不正确
+            print(f"Invalid login details: {username}, {password}")
+            return HttpResponse("Invalid login details supplied.")
+    #如果不是http request请求, 展示登录表格
+    #这种场景很可能是HTTP get
+    else:
+        return render(request, 'rango/login.html')
+    
+
+@login_required
+def restricted(request):
+    #return HttpResponse("Since you're logged in, you can see this text!")
+    return render(request, 'rango/restricted.html')
+
+# Use the login_required() decorator to ensure only those logged in can
+# access the view.
+@login_required
+def user_logout(request):
+    # Since we know the user is logged in, we can now just log them out.
+    logout(request)
+    # Take the user back to the homepage.
+    return redirect(reverse('rango:index'))

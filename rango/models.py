@@ -1,7 +1,8 @@
+from distutils.command.upload import upload
 from tabnanny import verbose
 from django.db import models
 from django.template.defaultfilters import slugify
-
+from django.contrib.auth.models import User
 # Create your models here.
 
 class Category(models.Model):
@@ -34,3 +35,14 @@ class Page(models.Model):
 
     def __str__(self):
         return self.title
+
+class UserProfile(models.Model):
+    # 链接Userprofile类和UserModel
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+
+    # 额外属性
+    website = models.URLField(blank=True)
+    picture = models.ImageField(upload_to='profile_images', blank=True)
+
+    def __str__(self):
+        return self.user.username
